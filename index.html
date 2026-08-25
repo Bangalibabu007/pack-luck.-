@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC TeamRank</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/recharts@2.7.2/umd/Recharts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background:
+        radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 30%),
+        radial-gradient(circle at right, rgba(168,85,247,0.16), transparent 25%),
+        linear-gradient(180deg, #07111f 0%, #040816 100%);
+      color: white;
+      font-family: Inter, system-ui, sans-serif;
+    }
+    .glass {
+      background: rgba(10, 15, 30, 0.68);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+    }
+    .neon {
+      box-shadow: 0 0 20px rgba(59,130,246,0.28), 0 0 40px rgba(168,85,247,0.12);
+    }
+    .pitch {
+      background:
+        linear-gradient(90deg, rgba(16,185,129,0.1) 0 50%, rgba(34,197,94,0.08) 50% 100%),
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      position: relative;
+      overflow: hidden;
+    }
+    .pitch::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 20px;
+      pointer-events: none;
+    }
+    .player-chip {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      min-width: 70px;
+      text-align: center;
+      padding: 6px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1.1;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+    .excellent { color: #34d399; border-color: rgba(52,211,153,0.5); }
+    .good { color: #60a5fa; border-color: rgba(96,165,250,0.5); }
+    .average { color: #fbbf24; border-color: rgba(251,191,36,0.5); }
+    .weak { color: #f87171; border-color: rgba(248,113,113,0.5); }
+    input, select, textarea {
+      background: rgba(255,255,255,0.05) !important;
+      color: white !important;
+      border: 1px solid rgba(255,255,255,0.12) !important;
+    }
+    option { color: black; }
+    .tab.active {
+      background: linear-gradient(90deg, #2563eb, #7c3aed);
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <header class="glass neon rounded-3xl p-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-bold">FC TeamRank</h1>
+        <p class="text-slate-300 mt-1">Independent community rating system for FC Mobile squads.</p>
+        <p class="text-xs text-slate-400 mt-2">Not affiliated with or endorsed by EA.</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="tab active px-4 py-2 rounded-xl bg-slate-800" onclick="showTab('dashboard')">Dashboard</button>
+        <button class="tab px-4 py-2 rounded-xl bg-slate-800" onclick="showTab('team')">My Team</button>
+        <button class="tab px-4 py-2 rounded-xl bg-slate-800" onclick="showTab('compare')">Compare</button>
+        <button class="tab px-4 py-2 rounded-xl bg-slate-800" onclick="showTab('rankings')">Rankings</button>
+        <button class="tab px-4 py-2 rounded-xl bg-slate-800" onclick="showTab('history')">History</button>
+      </div>
+    </header>
+
+    <section id="dashboard" class="space-y-6">
+      <div class="grid md:grid-cols-4 gap-4">
+        <div class="glass rounded-3xl p-5"><div class="text-slate-400 text-sm">Current TeamRank</div><div id="dashScore" class="text-4xl font-bold mt-2">0</div></div>
+        <div class="glass rounded-3xl p-5"><div class="text-slate-400 text-sm">Percentile</div><div id="dashPercentile" class="text-4xl font-bold mt-2">0%</div></div>
+        <div class="glass rounded-3xl p-5"><div class="text-slate-400 text-sm">Biggest Weakness</div><div id="dashWeakness" class="text-xl font-semibold mt-2">None</div></div>
+        <div class="glass rounded-3xl p-5"><div class="text-slate-400 text-sm">Recommended Upgrade</div><div id="dashUpgrade" class="text-xl font-semibold mt-2">-</div></div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass rounded-3xl p-5">
+          <h2 class="text-xl font-semibold mb-4">Team Breakdown</h2>
+          <canvas id="breakdownChart" height="240"></canvas>
+        </div>
+        <div class="glass rounded-3xl p-5">
+          <h2 class="text-xl font-semibold mb-4">Recent Analyses</h2>
+          <div id="recentAnalyses" class="space-y-3 text-sm text-slate-200"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="team" class="hidden space-y-6">
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="glass rounded-3xl p-5 lg:col-span-1 space-y-4">
+          <h2 class="text-xl font-semibold">Team Input</h2>
+          <input id="teamName" class="w-full rounded-xl px-4 py-3" placeholder="Team name" />
+          <select id="formation" class="w-full rounded-xl px-4 py-3">
+            <option>4-3-3</option><option>4-2-3-1</option><option>4-4-2</option><option>4-2-2-2</option>
+            <option>4-1-2-1-2</option><option>3-5-2</option><option>3-4-3</option><option>5-2-3</option><option>5-3-2</option>
+          </select>
+          <input id="teamOVR" type="number" class="w-full rounded-xl px-4 py-3" placeholder="Team OVR" min="0" max="200" />
+          <button onclick="addPlayerRow()" class="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500">Add Player</button>
+          <button onclick="analyzeTeam()" class="w-full px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-500">Analyze Team</button>
+          <button onclick="saveCurrentTeam()" class="w-full px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500">Save Team</button>
+          <div class="text-xs text-slate-400">Screenshot analysis can be added later using OCR + verify/edit flow.</div>
+        </div>
+
+        <div class="glass rounded-3xl p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold">Players</h2>
+            <div class="text-sm text-slate-400">Starting XI + subs</div>
+          </div>
+          <div id="players" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <div id="analysisPanel" class="hidden grid lg:grid-cols-3 gap-6">
+        <div class="glass rounded-3xl p-5 lg:col-span-1">
+          <div class="text-slate-400">Overall Score</div>
+          <div id="overallScore" class="text-6xl font-bold mt-2">0</div>
+          <div id="tier" class="mt-2 text-lg font-semibold">Weak</div>
+          <div id="percentile" class="mt-4 text-slate-300"></div>
+          <div id="consistencyWarn" class="mt-4 text-sm text-amber-300"></div>
+        </div>
+
+        <div class="glass rounded-3xl p-5 lg:col-span-1">
+          <h3 class="text-lg font-semibold mb-3">Unit Scores</h3>
+          <div id="unitScores" class="space-y-3"></div>
+        </div>
+
+        <div class="glass rounded-3xl p-5 lg:col-span-1">
+          <h3 class="text-lg font-semibold mb-3">Weaknesses</h3>
+          <ol id="weaknessList" class="list-decimal pl-5 space-y-2 text-slate-200"></ol>
+          <div class="mt-4 p-4 rounded-2xl bg-slate-900/70 border border-white/10">
+            <div class="text-slate-400 text-sm">Upgrade Recommendation</div>
+            <div id="upgradeRec" class="text-lg font-semibold mt-1"></div>
+          </div>
+        </div>
+
+        <div class="glass rounded-3xl p-5 lg:col-span-3">
+          <h3 class="text-lg font-semibold mb-3">Formation Pitch</h3>
+          <div id="pitch" class="pitch rounded-3xl h-[540px] relative"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compare" class="hidden space-y-6">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="glass rounded-3xl p-5">
+          <h2 class="text-xl font-semibold mb-4">Team A</h2>
+          <textarea id="teamA" class="w-full h-64 rounded-xl p-4" placeholder="Paste saved team JSON here"></textarea>
+        </div>
+        <div class="glass rounded-3xl p-5">
+          <h2 class="text-xl font-semibold mb-4">Team B</h2>
+          <textarea id="teamB" class="w-full h-64 rounded-xl p-4" placeholder="Paste saved team JSON here"></textarea>
+        </div>
+      </div>
+      <button onclick="compareTeams()" class="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500">Compare Teams</button>
+      <div id="compareResult" class="grid md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <section id="rankings" class="hidden glass rounded-3xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Leaderboard</h2>
+        <button onclick="renderRankings()" class="px-4 py-2 rounded-xl bg-blue-600">Refresh</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="text-slate-400">
+            <tr>
+              <th class="py-2">Rank</th><th>Name</th><th>OVR</th><th>Score</th><th>Percentile</th><th>Attack</th><th>Mid</th><th>Defense</th>
+            </tr>
+          </thead>
+          <tbody id="rankingTable" class="divide-y divide-white/10"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="history" class="hidden glass rounded-3xl p-5">
+      <h2 class="text-xl font-semibold mb-4">Saved Teams</h2>
+      <div id="historyList" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </section>
+  </div>
+
+  <script>
+    const state = { players: [], currentResult: null };
+    const formations = {
+      "4-3-3": ["GK","LB","CB","CB","RB","CM","CM","CM","LW","ST","RW"],
+      "4-2-3-1": ["GK","LB","CB","CB","RB","CDM","CDM","LAM","CAM","RAM","ST"],
+      "4-4-2": ["GK","LB","CB","CB","RB","LM","CM","CM","RM","ST","ST"],
+      "4-2-2-2": ["GK","LB","CB","CB","RB","CDM","CDM","CAM","CAM","ST","ST"],
+      "4-1-2-1-2": ["GK","LB","CB","CB","RB","CDM","CM","CM","CAM","ST","ST"],
+      "3-5-2": ["GK","CB","CB","CB","LM","CM","CM","CM","RM","ST","ST"],
+      "3-4-3": ["GK","CB","CB","CB","LM","CM","CM","RM","LW","ST","RW"],
+      "5-2-3": ["GK","LB","CB","CB","RB","CM","CM","LW","ST","RW"],
+      "5-3-2": ["GK","LB","CB","CB","CB","RB","CM","CM","CM","ST","ST"],
+    };
+
+    function showTab(id) {
+      ["dashboard","team","compare","rankings","history"].forEach(x => document.getElementById(x).classList.add("hidden"));
+      document.getElementById(id).classList.remove("hidden");
+      document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+      event.target.classList.add("active");
+      if (id === "history") renderHistory();
+      if (id === "rankings") renderRankings();
+    }
+
+    function addPlayerRow(p = {}) {
+      const div = document.createElement("div");
+      div.className = "grid md:grid-cols-7 gap-2 items-center p-3 rounded-2xl bg-white/5 border border-white/10";
+      div.innerHTML = `
+        <input class="pname rounded-lg px-3 py-2" placeholder="Player name" value="${p.name || ""}">
+        <input class="ppos rounded-lg px-3 py-2" placeholder="Position" value="${p.position || ""}">
+        <input class="povr rounded-lg px-3 py-2" type="number" placeholder="OVR" value="${p.ovr || ""}">
+        <input class="pbase rounded-lg px-3 py-2" type="number" placeholder="Base OVR" value="${p.baseOvr || ""}">
+        <input class="prank rounded-lg px-3 py-2" type="number" placeholder="Rank" value="${p.rankLevel || ""}">
+        <input class="ptrain rounded-lg px-3 py-2" type="number" placeholder="Training" value="${p.trainingLevel || ""}">
+        <input class="prole rounded-lg px-3 py-2" placeholder="Role" value="${p.role || ""}">
+      `;
+      document.getElementById("players").appendChild(div);
+    }
+
+    function getPlayers() {
+      return [...document.querySelectorAll("#players > div")].map(row => ({
+        name: row.querySelector(".pname").value.trim(),
+        position: row.querySelector(".ppos").value.trim().toUpperCase(),
+        ovr: Number(row.querySelector(".povr").value || 0),
+        baseOvr: Number(row.querySelector(".pbase").value || 0),
+        rankLevel: Number(row.querySelector(".prank").value || 0),
+        trainingLevel: Number(row.querySelector(".ptrain").value || 0),
+        role: row.querySelector(".prole").value.trim(),
+        isStarter: true
+      })).filter(p => p.name);
+    }
+
+    function clamp(n, a=0, b=100) { return Math.max(a, Math.min(b, n)); }
+    function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+    function stdev(arr) {
+      const m = mean(arr); return arr.length ? Math.sqrt(mean(arr.map(x => (x-m)**2))) : 0;
+    }
+
+    function fitScore(pos, slot) {
+      const p = pos.toUpperCase(), s = slot.toUpperCase();
+      if (p === s) return 100;
+      const related = {
+        GK:["GK"],
+        CB:["CB","LCB","RCB"],
+        LB:["LB","LWB"],
+        RB:["RB","RWB"],
+        CDM:["CDM","CM"],
+        CM:["CM","CDM","CAM"],
+        CAM:["CAM","CM","LAM","RAM"],
+        LW:["LW","LM","RW"],
+        RW:["RW","RM","LW"],
+        ST:["ST","CF"],
+        LM:["LM","LW","CM"],
+        RM:["RM","RW","CM"]
+      };
+      for (const k in related) if (related[k].includes(s) && k === p) return 92;
+      if ((p === "ST" && ["CB","LB","RB","GK"].includes(s)) || (p === "GK" && s !== "GK")) return 10;
+      return 65;
+    }
+
+    function attrScore(player, slot) {
+      const a = {
+        pace: 0, shooting: 0, passing: 0, dribbling: 0, defending: 0, physical: 0, diving: 0, handling: 0, reflexes: 0, positioning: 0, stamina: 0
+      };
+      const o = player.ovr;
+      const map = {
+        ST: ["shooting","pace","physical"],
+        LW: ["pace","dribbling","passing","shooting"],
+        RW: ["pace","dribbling","passing","shooting"],
+        CAM: ["passing","dribbling","shooting"],
+        CM: ["passing","stamina","defending","dribbling"],
+        CDM: ["defending","physical","passing"],
+        CB: ["defending","physical","pace"],
+        LB: ["pace","defending","stamina"],
+        RB: ["pace","defending","stamina"],
+        GK: ["diving","handling","reflexes","positioning"]
+      };
+      const relevant = map[slot] || ["pace","passing","stamina"];
+      return clamp((o * 0.75) + 20 + relevant.length * 2);
+    }
+
+    function evaluateTeam(team) {
+      const formationSlots = formations[team.formation] || formations["4-3-3"];
+      const starters = team.players.slice(0, 11);
+      const subs = team.players.slice(11);
+      const ovrAvg = mean(team.players.map(p => p.ovr));
+      const starterAvg = mean(starters.map(p => p.ovr));
+      const variancePenalty = clamp(100 - stdev(team.players.map(p => p.ovr)) * 2, 35, 100);
+
+      let fitScores = [];
+      let attrScores = [];
+      let slotScores = [];
+      let unitMap = { GK:[], DEF:[], MID:[], ATT:[] };
+
+      starters.forEach((p, i) => {
+        const slot = formationSlots[i] || p.position;
+        const fit = fitScore(p.position, slot);
+        const attrs = attrScore(p, slot);
+        const posScore = clamp((p.ovr * 0.7) + (fit * 0.2) + (attrs * 0.1));
+        fitScores.push(fit);
+        attrScores.push(attrs);
+        slotScores.push(posScore);
+        if (slot === "GK") unitMap.GK.push(posScore);
+        else if (["CB","LB","RB","LWB","RWB"].includes(slot)) unitMap.DEF.push(posScore);
+        else if (["CM","CDM","CAM","LM","RM","LAM","RAM"].includes(slot)) unitMap.MID.push(posScore);
+        else unitMap.ATT.push(posScore);
+      });
+
+      const teamOVRScore = clamp((team.teamOVR - 60) / 0.8);
+      const startingXIScore = clamp((starterAvg - 60) / 0.75);
+      const positionStrengthScore = clamp(mean(fitScores));
+      const keyAttributesScore = clamp(mean(attrScores));
+      const subsAvg = subs.length ? mean(subs.map(p => p.ovr)) : starterAvg - 12;
+      const depthScore = clamp(((subsAvg - 55) / 0.6));
+      const unitScores = {
+        attack: clamp(mean(unitMap.ATT)),
+        midfield: clamp(mean(unitMap.MID)),
+        defense: clamp(mean(unitMap.DEF)),
+        gk: clamp(mean(unitMap.GK)),
+        balance: clamp(100 - Math.abs(mean([mean(unitMap.ATT),mean(unitMap.MID),mean(unitMap.DEF),mean(unitMap.GK)]) - ovrAvg) * 1.2),
+        depth: depthScore
+      };
+      const synergyScore = variancePenalty;
+
+      const finalScore = clamp(
+        teamOVRScore * 0.25 +
+        startingXIScore * 0.30 +
+        positionStrengthScore * 0.15 +
+        keyAttributesScore * 0.10 +
+        unitScores.balance * 0.10 +
+        depthScore * 0.05 +
+        synergyScore * 0.05
+      );
+
+      const tier = finalScore >= 95 ? "Elite" :
+        finalScore >= 90 ? "World Class" :
+        finalScore >= 85 ? "Excellent" :
+        finalScore >= 80 ? "Strong" :
+        finalScore >= 75 ? "Good" :
+        finalScore >= 70 ? "Average" :
+        finalScore >= 60 ? "Below Average" : "Weak";
+
+      const weaknesses = [];
+      const avg = mean(slotScores);
+      team.players.slice(0,11).forEach((p, i) => {
+        const slot = formationSlots[i] || p.position;
+        const ps = clamp((p.ovr * 0.7) + (fitScore(p.position, slot) * 0.2) + (attrScore(p, slot) * 0.1));
+        if (ps < avg - 7) weaknesses.push(`${slot} is ${Math.round(avg - ps)} points below squad average`);
+      });
+
+      if (unitScores.gk < 70) weaknesses.push("Goalkeeper is a major weakness");
+      if (unitScores.defense < 75) weaknesses.push("Defense is below your overall squad level");
+      if (unitScores.midfield < 75) weaknesses.push("Midfield balance needs improvement");
+      if (unitScores.attack > 88 && unitScores.defense < 75) weaknesses.push("Overpowered attack with weak defense");
+      if (starterAvg - mean(team.players.map(p => p.ovr)) > 6 && subsAvg < starterAvg - 10) weaknesses.push("Bench depth is weak");
+      if (stdev(team.players.map(p => p.ovr)) > 10) weaknesses.push("One superstar is carrying too much of the squad");
+
+      const consistencyWarning = Math.abs(team.teamOVR - ovrAvg) > 8
+        ? "Your entered Team OVR appears inconsistent with player ratings. Please verify your squad."
+        : "";
+
+      return {
+        finalScore,
+        tier,
+        percentile: clamp(finalScore - 5, 0, 100),
+        unitScores,
+        weaknesses: [...new Set(weaknesses)].slice(0, 3),
+        recommendation: weaknesses[0]?.includes("GK") ? "Priority #1: Upgrade GK." :
+                        weaknesses[0]?.includes("Defense") || weaknesses[0]?.includes("CB") ? "Priority #1: Upgrade CB/RB/LB." :
+                        weaknesses[0]?.includes("Midfield") ? "Priority #1: Upgrade midfield." :
+                        "Priority #1: Upgrade the weakest position.",
+        consistencyWarning,
+        pitchSlots: formationSlots,
+        positionScores: slotScores
+      };
+    }
+
+    function analyzeTeam() {
+      const team = {
+        name: document.getElementById("teamName").value || "My Team",
+        formation: document.getElementById("formation").value,
+        teamOVR: Number(document.getElementById("teamOVR").value || 0),
+        players: getPlayers()
+      };
+      if (team.players.length < 11) {
+        alert("Please enter at least 11 players.");
+        return;
+      }
+      const result = evaluateTeam(team);
+      state.currentResult = { team, result };
+      renderAnalysis(team, result);
+      addToRecent(team, result);
+    }
+
+    function colorClass(score) {
+      if (score >= 90) return "excellent";
+      if (score >= 80) return "good";
+      if (score >= 70) return "average";
+      return "weak";
+    }
+
+    function renderAnalysis(team, result) {
+      document.getElementById("analysisPanel").classList.remove("hidden");
+      document.getElementById("overallScore").innerText = result.finalScore.toFixed(1);
+      document.getElementById("tier").innerText = result.tier;
+      document.getElementById("percentile").innerText = `You are better than ${Math.round(result.percentile)}% of teams analyzed.`;
+      document.getElementById("consistencyWarn").innerText = result.consistencyWarning;
+      document.getElementById("upgradeRec").innerText = result.recommendation;
+      document.getElementById("weaknessList").innerHTML = result.weaknesses.map(w => `<li>${w}</li>`).join("");
+      document.getElementById("unitScores").innerHTML = `
+        <div class="flex justify-between"><span>Attack</span><span>${result.unitScores.attack.toFixed(0)}/100</span></div>
+        <div class="flex justify-between"><span>Midfield</span><span>${result.unitScores.midfield.toFixed(0)}/100</span></div>
+        <div class="flex justify-between"><span>Defense</span><span>${result.unitScores.defense.toFixed(0)}/100</span></div>
+        <div class="flex justify-between"><span>Goalkeeper</span><span>${result.unitScores.gk.toFixed(0)}/100</span></div>
+        <div class="flex justify-between"><span>Depth</span><span>${result.unitScores.depth.toFixed(0)}/100</span></div>
+        <div class="flex justify-between"><span>Balance</span><span>${result.unitScores.balance.toFixed(0)}/100</span></div>
+      `;
+
+      const pitch = document.getElementById("pitch");
+      pitch.innerHTML = "";
+      const slots = result.pitchSlots;
+      const positions = {
+        "4-3-3":[[50,92],[15,74],[37,72],[63,72],[85,74],[28,54],[50,54],[72,54],[18,28],[50,24],[82,28]],
+        "4-2-3-1":[[50,92],[15,74],[37,72],[63,72],[85,74],[38,56],[62,56],[18,38],[50,38],[82,38],[50,18]],
+        "4-4-2":[[50,92],[15,74],[37,72],[63,72],[85,74],[18,48],[38,48],[62,48],[82,48],[40,20],[60,20]],
+        "4-2-2-2":[[50,92],[15,74],[37,72],[63,72],[85,74],[35,54],[65,54],[32,34],[68,34],[42,20],[58,20]],
+        "4-1-2-1-2":[[50,92],[15,74],[37,72],[63,72],[85,74],[50,58],[35,44],[65,44],[50,32],[42,18],[58,18]],
+        "3-5-2":[[50,92],[30,72],[50,72],[70,72],[15,50],[33,52],[50,52],[67,52],[85,50],[42,18],[58,18]],
+        "3-4-3":[[50,92],[30,72],[50,72],[70,72],[18,48],[42,48],[58,48],[82,48],[18,22],[50,18],[82,22]],
+        "5-2-3":[[50,92],[10,72],[30,74],[50,76],[70,74],[90,72],[38,50],[62,50],[25,24],[50,18],[75,24]],
+        "5-3-2":[[50,92],[10,72],[30,74],[50,76],[70,74],[90,72],[35,48],[50,48],[65,48],[42,20],[58,20]],
+      }[team.formation] || positions["4-3-3"];
+
+      team.players.slice(0,11).forEach((p, i) => {
+        const [x,y] = positions[i];
+        const div = document.createElement("div");
+        div.className = `player-chip ${colorClass(result.positionScores[i])}`;
+        div.style.left = x + "%";
+        div.style.top = y + "%";
+        div.innerHTML = `<div class="font-bold">${p.position || slots[i]}</div><div>${p.ovr}</div><div class="text-[10px] text-slate-300">${p.name}</div>`;
+        pitch.appendChild(div);
+      });
+
+      document.getElementById("dashScore").innerText = result.finalScore.toFixed(1);
+      document.getElementById("dashPercentile").innerText = `${Math.round(result.percentile)}%`;
+      document.getElementById("dashWeakness").innerText = result.weaknesses[0] || "None";
+      document.getElementById("dashUpgrade").innerText = result.recommendation.replace("Priority #1: ", "");
+      renderChart(result.unitScores);
+      saveToRecent(team, result);
+    }
+
+    let chart;
+    function renderChart(u) {
+      const ctx = document.getElementById("breakdownChart").getContext("2d");
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "radar",
+        data: {
+          labels: ["Attack","Midfield","Defense","GK","Depth","Balance"],
+          datasets: [{
+            label: "TeamRank",
+            data: [u.attack, u.midfield, u.defense, u.gk, u.depth, u.balance],
+            fill: true,
+            backgroundColor: "rgba(59,130,246,0.18)",
+            borderColor: "rgba(96,165,250,0.95)",
+            pointBackgroundColor: "rgba(168,85,247,1)"
+          }]
+        },
+        options: {
+          scales: { r: { suggestedMin: 0, suggestedMax: 100, ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.1)" }, angleLines: { color: "rgba(255,255,255,0.1)" }, pointLabels: { color: "#e2e8f0" } } },
+          plugins: { legend: { labels: { color: "#e2e8f0" } } }
+        }
+      });
+    }
+
+    function saveToRecent(team, result) {
+      const recent = JSON.parse(localStorage.getItem("fctr_recent") || "[]");
+      recent.unshift({ team, result, time: new Date().toLocaleString() });
+      localStorage.setItem("fctr_recent", JSON.stringify(recent.slice(0, 10)));
+    }
+
+    function addToRecent(team, result) {
+      renderHistory();
+      renderRecent();
+      renderRankings();
+    }
+
+    function renderRecent() {
+      const recent = JSON.parse(localStorage.getItem("fctr_recent") || "[]");
+      document.getElementById("recentAnalyses").innerHTML = recent.slice(0, 5).map(x => `
+        <div class="p-3 rounded-2xl bg-white/5 border border-white/10">
+          <div class="font-semibold">${x.team.name}</div>
+          <div class="text-slate-400 text-xs">${x.time}</div>
+          <div class="mt-1">Score: ${x.result.finalScore.toFixed(1)} | ${x.result.tier}</div>
+        </div>
+      `).join("") || "<div class='text-slate-400'>No analyses yet.</div>";
+    }
+
+    function renderHistory() {
+      const saved = JSON.parse(localStorage.getItem("fctr_saved") || "[]");
+      document.getElementById("historyList").innerHTML = saved.map((x, i) => `
+        <div class="p-4 rounded-2xl bg-white/5 border border-white/10">
+          <div class="font-semibold">${x.name}</div>
+          <div class="text-slate-400 text-sm">${x.formation} • OVR ${x.teamOVR}</div>
+          <div class="mt-1">Score: ${x.result.finalScore.toFixed(1)}</div>
+          <div class="mt-3 flex gap-2">
+            <button class="px-3 py-2 rounded-lg bg-blue-600" onclick="loadSaved(${i})">Load</button>
+            <button class="px-3 py-2 rounded-lg bg-red-600" onclick="deleteSaved(${i})">Delete</button>
+          </div>
+        </div>
+      `).join("") || "<div class='text-slate-400'>No saved teams yet.</div>";
+    }
+
+    function saveCurrentTeam() {
+      if (!state.currentResult) return alert("Analyze a team first.");
+      const saved = JSON.parse(localStorage.getItem("fctr_saved") || "[]");
+      saved.unshift(state.currentResult);
+      localStorage.setItem("fctr_saved", JSON.stringify(saved.slice(0, 20)));
+      alert("Team saved.");
+      renderHistory();
+      renderRankings();
+    }
+
+    function loadSaved(i) {
+      const saved = JSON.parse(localStorage.getItem("fctr_saved") || "[]")[i];
+      if (!saved) return;
+      document.getElementById("teamName").value = saved.team.name;
+      document.getElementById("formation").value = saved.team.formation;
+      document.getElementById("teamOVR").value = saved.team.teamOVR;
+      document.getElementById("players").innerHTML = "";
+      saved.team.players.forEach(p => addPlayerRow(p));
+      showTab("team");
+      renderAnalysis(saved.team, saved.result);
+    }
+
+    function deleteSaved(i) {
+      const saved = JSON.parse(localStorage.getItem("fctr_saved") || "[]");
+      saved.splice(i, 1);
+      localStorage.setItem("fctr_saved", JSON.stringify(saved));
+      renderHistory();
+      renderRankings();
+    }
+
+    function compareTeams() {
+      const a = JSON.parse(document.getElementById("teamA").value || "null");
+      const b = JSON.parse(document.getElementById("teamB").value || "null");
+      if (!a || !b) return alert("Paste valid team JSON objects.");
+      const ra = evaluateTeam(a.team || a);
+      const rb = evaluateTeam(b.team || b);
+      const stronger = ra.finalScore > rb.finalScore ? "Team A" : "Team B";
+      document.getElementById("compareResult").innerHTML = `
+        <div class="glass rounded-3xl p-5">
+          <h3 class="text-lg font-semibold mb-3">Team A</h3>
+          <div>Score: ${ra.finalScore.toFixed(1)}</div>
+          <div>Attack: ${ra.unitScores.attack.toFixed(0)}</div>
+          <div>Midfield: ${ra.unitScores.midfield.toFixed(0)}</div>
+          <div>Defense: ${ra.unitScores.defense.toFixed(0)}</div>
+          <div>GK: ${ra.unitScores.gk.toFixed(0)}</div>
+          <div>Balance: ${ra.unitScores.balance.toFixed(0)}</div>
+          <div>Depth: ${ra.unitScores.depth.toFixed(0)}</div>
+        </div>
+        <div class="glass rounded-3xl p-5">
+          <h3 class="text-lg font-semibold mb-3">Team B</h3>
+          <div>Score: ${rb.finalScore.toFixed(1)}</div>
+          <div>Attack: ${rb.unitScores.attack.toFixed(0)}</div>
+          <div>Midfield: ${rb.unitScores.midfield.toFixed(0)}</div>
+          <div>Defense: ${rb.unitScores.defense.toFixed(0)}</div>
+          <div>GK: ${rb.unitScores.gk.toFixed(0)}</div>
+          <div>Balance: ${rb.unitScores.balance.toFixed(0)}</div>
+          <div>Depth: ${rb.unitScores.depth.toFixed(0)}</div>
+          <div class="mt-3 font-semibold text-emerald-300">${stronger} is stronger overall.</div>
+        </div>
+      `;
+    }
+
+    function renderRankings() {
+      const saved = JSON.parse(localStorage.getItem("fctr_saved") || "[]")
+        .map(x => ({ ...x, score: x.result.finalScore }))
+        .sort((a,b) => b.score - a.score);
+      document.getElementById("rankingTable").innerHTML = saved.map((x, i) => `
+        <tr class="border-b border-white/10">
+          <td class="py-3">${i+1}</td>
+          <td>${x.team.name}</td>
+          <td>${x.team.teamOVR}</td>
+          <td>${x.result.finalScore.toFixed(1)}</td>
+          <td>${Math.round(x.result.percentile)}%</td>
+          <td>${x.result.unitScores.attack.toFixed(0)}</td>
+          <td>${x.result.unitScores.midfield.toFixed(0)}</td>
+          <td>${x.result.unitScores.defense.toFixed(0)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="8" class="py-4 text-slate-400">No teams saved yet.</td></tr>`;
+    }
+
+    addPlayerRow({position:"GK"});
+    addPlayerRow({position:"LB"});
+    addPlayerRow({position:"CB"});
+    addPlayerRow({position:"CB"});
+    addPlayerRow({position:"RB"});
+    addPlayerRow({position:"CM"});
+    addPlayerRow({position:"CM"});
+    addPlayerRow({position:"CM"});
+    addPlayerRow({position:"LW"});
+    addPlayerRow({position:"ST"});
+    addPlayerRow({position:"RW"});
+    renderRecent();
+    renderRankings();
+  </script>
+</body>
+</html>
