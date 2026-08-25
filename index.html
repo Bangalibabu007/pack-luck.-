@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FC TeamRank</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 {
+            color: #2e86de;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        input, select, button {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #2e86de;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1c6cba;
+        }
+        .players-list {
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .player {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>FC TeamRank</h1>
+    <input type="text" id="teamName" placeholder="Team Name" required />
+    <input type="text" id="formation" placeholder="Formation (e.g., 4-3-3)" required />
+
+    <h2>Add Players</h2>
+    <input type="text" id="playerName" placeholder="Player Name" required />
+    <input type="text" id="playerPosition" placeholder="Position" required />
+    <input type="number" id="playerOVR" placeholder="OVR" required min="0" />
+    
+    <button onclick="addPlayer()">Add Player</button>
+
+    <div class="players-list" id="playersList"></div>
+
+    <h2>Team Rating: <span id="teamRating">0</span></h2>
+    <button onclick="submitTeam()">Submit Team</button>
+</div>
+
+<script>
+    let players = [];
+
+    function addPlayer() {
+        const playerName = document.getElementById('playerName').value;
+        const playerPosition = document.getElementById('playerPosition').value;
+        const playerOVR = parseInt(document.getElementById('playerOVR').value);
+
+        if (playerName && playerPosition && !isNaN(playerOVR)) {
+            const player = { name: playerName, position: playerPosition, ovr: playerOVR };
+            players.push(player);
+
+            document.getElementById('playersList').innerHTML += `
+                <div class="player">
+                    <span>${player.name} (${player.position}) - OVR: ${playerOVR}</span>
+                    <button onclick="removePlayer('${playerName}')">Remove</button>
+                </div>
+            `;
+
+            document.getElementById('playerName').value = '';
+            document.getElementById('playerPosition').value = '';
+            document.getElementById('playerOVR').value = '';
+            updateTeamRating();
+        } else {
+            alert('Please fill all fields correctly.');
+        }
+    }
+
+    function removePlayer(name) {
+        players = players.filter(player => player.name !== name);
+        document.getElementById('playersList').innerHTML = '';
+        players.forEach(player => {
+            document.getElementById('playersList').innerHTML += `
+                <div class="player">
+                    <span>${player.name} (${player.position}) - OVR: ${player.ovr}</span>
+                    <button onclick="removePlayer('${player.name}')">Remove</button>
+                </div>
+            `;
+        });
+        updateTeamRating();
+    }
+
+    function updateTeamRating() {
+        if (players.length === 0) {
+            document.getElementById('teamRating').innerText = '0';
+            return;
+        }
+
+        const totalOVR = players.reduce((sum, player) => sum + player.ovr, 0);
+        const averageOVR = totalOVR / players.length;
+        document.getElementById('teamRating').innerText = Math.min(Math.max(averageOVR, 0), 100).toFixed(2);
+    }
+
+    function submitTeam() {
+        const teamName = document.getElementById('teamName').value;
+        const formation = document.getElementById('formation').value;
+
+        if (teamName && formation && players.length > 0) {
+            alert(`Team Submitted!\nName: ${teamName}\nFormation: ${formation}\nRating: ${document.getElementById('teamRating').innerText}`);
+            // Here you can implement actual submission logic like saving the team data.
+            resetForm();
+        } else {
+            alert('Please complete the team info and add players before submitting.');
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('teamName').value = '';
+        document.getElementById('formation').value = '';
+        document.getElementById('playersList').innerHTML = '';
+        players = [];
+        document.getElementById('teamRating').innerText = '0';
+    }
+</script>
+
+</body>
+</html>
